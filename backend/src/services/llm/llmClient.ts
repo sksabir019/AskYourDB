@@ -110,24 +110,10 @@ const MAX_QUESTION_LENGTH = 500;
 const MAX_SAMPLE_ROWS = 3;
 const MAX_SAMPLE_LENGTH = 1000;
 
-export async function generateQueryPlan(nl: string, schemaHint: any): Promise<any> {
-  try {
-    if (!nl || nl.length === 0) {
-      throw new LLMError('Question cannot be empty');
-    }
-    
-    if (nl.length > MAX_QUESTION_LENGTH) {
-      throw new LLMError(`Question exceeds maximum length of ${MAX_QUESTION_LENGTH} characters`);
-    }
-    
-    const provider = config.llm.provider;
-    logger.info(`Using LLM provider: ${provider}`);
-    
-    // Calculate date for examples
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    
-    const userPrompt = `Question: ${nl}
+function buildUserPrompt(nl: string, schemaHint: any) {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return `Question: ${nl}
 
 Available Collections/Tables: ${JSON.stringify(schemaHint || {})}
 
@@ -190,11 +176,45 @@ Example queries:
 }
 
 Now generate the query plan for the question above. Output ONLY the JSON, nothing else.`;
-    
+}
+
+function handleLlmError(error: unknown, providerRaw: string): never {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  const errorName = error instanceof Error ? error.name : 'Error';
+  const provider = providerRaw.toUpperCase();
+  logger.error(`LLM query plan generation error (${errorName}):`, errorMessage);
+
+  if (errorMessage.includes('API key') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+    throw new LLMError(`Invalid or missing ${provider} API key. Please check your ${provider}_API_KEY in .env file`);
+  }
+  if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+    throw new LLMError(`${provider} API rate limit exceeded. Please try again later`);
+  }
+  if (errorMessage.includes('quota') || errorMessage.includes('insufficient_quota')) {
+    throw new LLMError(`${provider} API quota exceeded. Please check your billing`);
+  }
+
+  throw new LLMError(`Failed to generate query plan: ${errorMessage}`);
+}
+
+export async function generateQueryPlan(nl: string, schemaHint: any): Promise<any> {
+  try {
+    if (!nl || nl.length === 0) {
+      throw new LLMError('Question cannot be empty');
+    }
+
+    if (nl.length > MAX_QUESTION_LENGTH) {
+      throw new LLMError(`Question exceeds maximum length of ${MAX_QUESTION_LENGTH} characters`);
+    }
+
+    const provider = config.llm.provider;
+    logger.info(`Using LLM provider: ${provider}`);
+
     const client = getClient();
     const model = getModel();
     const systemPrompt = getSystemPrompt();
-    
+    const userPrompt = buildUserPrompt(nl, schemaHint);
+
     const response = await (client as any).chat.completions.create({
       model,
       messages: [
@@ -204,37 +224,19 @@ Now generate the query plan for the question above. Output ONLY the JSON, nothin
       temperature: 0,
       max_tokens: 500,
     });
-    
+
     const text = response.choices?.[0]?.message?.content || '';
     const parsed = safeJsonParse(text);
-    
+
     if (!parsed) {
       logger.error('LLM returned invalid JSON:', text);
       throw new LLMError('Failed to parse LLM response');
     }
-    
+
     return parsed;
   } catch (error) {
     if (error instanceof LLMError) throw error;
-    
-    // Log the actual error for debugging
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorName = error instanceof Error ? error.name : 'Error';
-    const provider = config.llm.provider.toUpperCase();
-    logger.error(`LLM query plan generation error (${errorName}):`, errorMessage);
-    
-    // Provide more specific error message for common issues
-    if (errorMessage.includes('API key') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
-      throw new LLMError(`Invalid or missing ${provider} API key. Please check your ${provider}_API_KEY in .env file`);
-    }
-    if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
-      throw new LLMError(`${provider} API rate limit exceeded. Please try again later`);
-    }
-    if (errorMessage.includes('quota') || errorMessage.includes('insufficient_quota')) {
-      throw new LLMError(`${provider} API quota exceeded. Please check your billing`);
-    }
-    
-    throw new LLMError(`Failed to generate query plan: ${errorMessage}`);
+    return handleLlmError(error, config.llm.provider);
   }
 }
 

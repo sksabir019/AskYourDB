@@ -73,7 +73,9 @@ AskYourDB lets you ask questions about your data in plain English. The AI conver
 
 ## Quick Start
 
-### Option 1: Docker (Recommended) 🐳
+### Option 1: Docker with Pre-built Images (Fastest) 🚀
+
+Pull and run pre-built images from Docker Hub:
 
 ```bash
 # 1. Clone repository
@@ -84,7 +86,33 @@ cd askyourdb
 cp infra/docker/.env.example infra/docker/.env
 nano infra/docker/.env  # Add GROQ_API_KEY, MONGO_PASSWORD, JWT_SECRET
 
-# 3. Start production environment
+# 3. Pull images
+docker pull shazam007/askyourdb-backend:latest
+docker pull shazam007/askyourdb-frontend:latest
+
+# 4. Start with pre-built images
+docker-compose -f infra/docker/docker-compose.prod.yml up -d
+
+# 5. Seed databases
+make seed-prod
+
+# 6. Access application at http://localhost:3000
+```
+
+### Option 2: Docker Build from Source 🐳
+
+Build images locally:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/yourusername/askyourdb.git
+cd askyourdb
+
+# 2. Configure environment
+cp infra/docker/.env.example infra/docker/.env
+nano infra/docker/.env  # Add GROQ_API_KEY, MONGO_PASSWORD, JWT_SECRET
+
+# 3. Build and start
 make prod
 
 # 4. Seed databases with sample data
@@ -95,9 +123,14 @@ make seed-prod
 # Login with any email/password (demo mode)
 ```
 
+**Published Images:**
+- Backend: `docker.io/shazam007/askyourdb-backend:latest`
+- Frontend: `docker.io/shazam007/askyourdb-frontend:latest`
+
 **Production Status**: http://localhost:3000/health
 
-**See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for complete Docker guide.**
+**See [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md) for complete Docker guide.**
+**See [DOCKER_PUBLISHING.md](./DOCKER_PUBLISHING.md) for publishing your own images.**
 
 ### Development Mode
 
@@ -106,6 +139,12 @@ make dev              # Start dev environment (exposed database ports)
 make seed             # Seed dev databases
 make logs             # View all logs
 make status           # Check service status
+```
+
+**Quick pull and run:**
+```bash
+docker pull shazam007/askyourdb-backend:latest
+docker pull shazam007/askyourdb-frontend:latest
 ```
 
 ### Option 2: Manual Setup

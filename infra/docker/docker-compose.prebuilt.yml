@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongo:
+    image: mongo:7
+    container_name: askyourdb-mongo-prod
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: askyourdb
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - askyourdb-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: askyourdb-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: askyourdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - askyourdb-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API - Using pre-built image
+  backend:
+    image: shazam007/askyourdb-backend:latest
+    container_name: askyourdb-backend-prod
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD}@mongo:27017/askyourdb?authSource=admin
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: askyourdb
+      JWT_SECRET: ${JWT_SECRET}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      CORS_ORIGIN: http://localhost:3000
+    networks:
+      - askyourdb-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend - Using pre-built image
+  frontend:
+    image: shazam007/askyourdb-frontend:latest
+    container_name: askyourdb-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    networks:
+      - askyourdb-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  askyourdb-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  postgres-data:

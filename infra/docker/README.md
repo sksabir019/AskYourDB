@@ -6,14 +6,51 @@ Get AskYourDB running with Docker in under 5 minutes!
 - Docker & Docker Compose installed
 - Groq or OpenAI API key
 
-## 1. Setup Environment
+## Quick Start with Pre-built Images (Fastest) 🚀
+
+### 1. Setup Environment
 ```bash
 cd infra/docker
 cp .env.example .env
 nano .env  # Add your GROQ_API_KEY, MONGO_PASSWORD, JWT_SECRET
 ```
 
-## 2. Start Application
+### 2. Pull and Start
+```bash
+# Pull pre-built images
+docker pull shazam007/askyourdb-backend:latest
+docker pull shazam007/askyourdb-frontend:latest
+
+# Start with pre-built images
+docker-compose -f docker-compose.prebuilt.yml up -d
+```
+
+### 3. Seed Database
+```bash
+# From project root
+make seed-prod
+```
+
+### 4. Access Application
+- **Frontend**: http://localhost:3000
+- **Health**: http://localhost:3000/health
+
+**Published Images:**
+- `shazam007/askyourdb-backend:latest`
+- `shazam007/askyourdb-frontend:latest`
+
+---
+
+## Build from Source
+
+### 1. Setup Environment
+```bash
+cd infra/docker
+cp .env.example .env
+nano .env  # Add your GROQ_API_KEY, MONGO_PASSWORD, JWT_SECRET
+```
+
+### 2. Start Application
 ```bash
 # From project root
 make dev
@@ -21,21 +58,21 @@ make dev
 cd infra/docker && docker-compose -f docker-compose.dev.yml up -d
 ```
 
-## 3. Seed Database (Optional)
+### 3. Seed Database (Optional)
 ```bash
 make seed
 # or
 docker exec -it askyourdb-backend node dist/scripts/seedDatabase.js
 ```
 
-## 4. Access Application
+### 4. Access Application
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:4000/api/v1
 - **Health**: http://localhost:4000/health
 
 ## Default Login
-- Email: `admin@example.com`
-- Password: `password123`
+- Email: Any email
+- Password: Any password (demo mode)
 
 ## Useful Commands
 ```bash

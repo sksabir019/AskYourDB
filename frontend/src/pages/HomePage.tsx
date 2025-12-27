@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { TrendingUp, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useQueryStore } from '../store/queryStore';
 import { queryAPI, QueryResponse } from '../services/api';
@@ -15,8 +15,8 @@ export default function HomePage() {
   const { currentResult, isLoading, setLoading, setCurrentResult, addToHistory, history } = useQueryStore();
   const [localError, setLocalError] = useState<string | null>(null);
   const [executionTime, setExecutionTime] = useState<number | undefined>();
-  const [streamingAnswer, setStreamingAnswer] = useState<string>('');
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingAnswer, setStreamingAnswer] = useState<string>('');  const [isStreaming, setIsStreaming] = useState(false);
+  const [lastQuery, setLastQuery] = useState<string>('');
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -36,6 +36,7 @@ export default function HomePage() {
     setLoading(true);
     setStreamingAnswer('');
     setIsStreaming(true);
+    setLastQuery(question);
     const startTime = Date.now();
     let collectedAnswer = '';
 
@@ -159,7 +160,19 @@ export default function HomePage() {
 
       {localError && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-red-800 dark:text-red-200">{localError}</p>
+          <div className="flex items-center justify-between">
+            <p className="text-red-800 dark:text-red-200">{localError}</p>
+            {lastQuery && (
+              <button
+                onClick={() => handleQuery(lastQuery)}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200 rounded-lg hover:bg-red-200 dark:hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+          </div>
         </div>
       )}
 

@@ -15,24 +15,38 @@ export function errorHandler(err: Error | AppError, req: Request, res: Response,
   logger.error({
     errorId,
     message: err.message,
+    name: err.name,
     stack: err.stack,
     path: req.path,
     method: req.method,
     ip: req.ip,
     isOperational,
+    status,
   });
   
-  // Send error response
+  // Build user-friendly error response
   const response: any = {
+    success: false,
     errorId,
     message: config.server.env === 'development' || isOperational 
       ? err.message 
-      : 'Internal Server Error',
+      : 'An unexpected error occurred. Please try again later.',
+    timestamp: new Date().toISOString(),
   };
   
   // Include stack trace in development
   if (config.server.env === 'development') {
     response.stack = err.stack;
+    response.name = err.name;
+  }
+  
+  // Add helpful hints for common errors
+  if (err.message.includes('API key')) {
+    response.hint = 'Check your .env file and ensure your API keys are correctly configured.';
+  } else if (err.message.includes('rate limit')) {
+    response.hint = 'You have exceeded the rate limit. Please wait a moment before trying again.';
+  } else if (err.message.includes('quota')) {
+    response.hint = 'Your API usage quota has been exceeded. Please check your account billing.';
   }
   
   res.status(status).json(response);

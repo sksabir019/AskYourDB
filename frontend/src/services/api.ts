@@ -56,6 +56,8 @@ export interface QueryResponse {
     executionTime: string;
     sql?: string;
     query?: string;
+    cached?: boolean;
+    cacheAge?: number;
   };
   clarify?: string;
   requiresClarification?: boolean;

@@ -6,6 +6,7 @@ import { queryRequestSchema, validateRequest } from '../validators/requestValida
 import { ValidationError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { ERROR_MESSAGES, DEFAULT_TABLES, DEFAULT_COLLECTIONS } from '../../utils/constants';
+import { queryCache } from '../../utils/queryCache';
 
 export async function handleQuery(req: Request, res: Response, next: NextFunction) {
   const startTime = Date.now();
@@ -22,6 +23,20 @@ export async function handleQuery(req: Request, res: Response, next: NextFunctio
       tables: DEFAULT_TABLES as any,
       collections: DEFAULT_COLLECTIONS as any,
     };
+
+    // Check cache first
+    const cached = queryCache.get(question, schemaHint);
+    if (cached) {
+      logger.info(`Cache hit for query: ${question.substring(0, 100)}`);
+      return res.status(200).json({
+        ...cached,
+        meta: {
+          ...cached.meta,
+          cached: true,
+          cacheAge: Date.now() - cached.cachedAt,
+        },
+      });
+    }
     
     // Generate query plan using LLM
     const plan = await generateQueryPlan(question, schemaHint);
@@ -57,7 +72,7 @@ export async function handleQuery(req: Request, res: Response, next: NextFunctio
     const generatedSql = validatedPlan.sql || 
       (validatedPlan.operation === 'rawSql' ? validatedPlan.sql : null);
     
-    res.status(200).json({
+    const response = {
       success: true,
       answer,
       data: result.rows || [],
@@ -65,10 +80,19 @@ export async function handleQuery(req: Request, res: Response, next: NextFunctio
         plan: validatedPlan,
         rowCount: result.rows?.length || 0,
         executionTime: `${duration}ms`,
-        sql: generatedSql, // Include SQL for frontend display
-        query: generatedSql, // Alias for compatibility
+        sql: generatedSql,
+        query: generatedSql,
+        cached: false,
       },
-    });
+      cachedAt: Date.now(),
+    };
+
+    // Cache the response (5 minutes TTL for queries with results)
+    if (result.rows && result.rows.length > 0) {
+      queryCache.set(question, response, schemaHint, 5 * 60 * 1000);
+    }
+    
+    res.status(200).json(response);
   } catch (error) {
     logger.error('Query handler error:', error);
     return next(error);
@@ -146,13 +170,21 @@ export async function handleStreamQuery(req: Request, res: Response, next: NextF
   } catch (error) {
     logger.error('Streaming query handler error:', error);
     
+    // Extract error message
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    
     // If headers already sent, send error via SSE
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : 'Unknown error' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: errorMessage,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
       res.write(`data: [DONE]\n\n`);
       return res.end();
     }
     
+    // If headers not sent, pass to error handler
     return next(error);
   }
 }

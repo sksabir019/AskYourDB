@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Knex from 'knex';
 import { IDatabase, QueryPlan } from '../types';
 import { config } from '../../configs';

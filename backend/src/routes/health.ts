@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getAdapter } from '../db/factory';
 import { logger } from '../utils/logger';
 import { config } from '../configs';
+import { queryCache } from '../utils/queryCache';
 
 const router = Router();
 
@@ -43,6 +44,10 @@ router.get('/', async (_req: Request, res: Response) => {
     healthStatus.services = {
       llm: llmAvailable,
     };
+
+    // Add cache stats
+    const cacheStats = queryCache.getStats();
+    (healthStatus as any).cache = cacheStats;
 
     res.status(200).json(healthStatus);
   } catch (error) {

@@ -1,9 +1,11 @@
-import { CheckCircle, AlertCircle, Database, Code, Clock, Copy, Check, Sparkles } from 'lucide-react';
+import { CheckCircle, AlertCircle, Database, Code, Clock, Copy, Check, Sparkles, FileJson, Zap, FileSpreadsheet } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import type { QueryResponse } from '../services/api';
 import DataTable from './DataTable';
+import DataVisualization from './DataVisualization';
 
 interface ResultsDisplayProps {
   readonly result: QueryResponse | null;
@@ -60,6 +62,8 @@ function formatAnswer(text: string): JSX.Element {
 
 export default function ResultsDisplay({ result, executionTime, streamingAnswer, isStreaming }: ResultsDisplayProps) {
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedAnswer, setCopiedAnswer] = useState(false);
+  const [copiedResults, setCopiedResults] = useState(false);
 
   // Show streaming content if available
   if (isStreaming && streamingAnswer) {
@@ -98,6 +102,62 @@ export default function ResultsDisplay({ result, executionTime, streamingAnswer,
     }
   };
 
+  const copyAnswer = () => {
+    if (result?.answer) {
+      navigator.clipboard.writeText(result.answer);
+      setCopiedAnswer(true);
+      toast.success('Answer copied to clipboard');
+      setTimeout(() => setCopiedAnswer(false), 2000);
+    }
+  };
+
+  const copyResults = () => {
+    if (data && data.length > 0) {
+      navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+      setCopiedResults(true);
+      toast.success('Results copied to clipboard');
+      setTimeout(() => setCopiedResults(false), 2000);
+    }
+  };
+
+  const downloadJSON = () => {
+    if (data && data.length > 0) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `query-results-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Results downloaded');
+    }
+  };
+
+  const downloadCSV = () => {
+    if (data && data.length > 0) {
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const csv = XLSX.utils.sheet_to_csv(worksheet);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `query-results-${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('CSV downloaded');
+    }
+  };
+
+  const downloadExcel = () => {
+    if (data && data.length > 0) {
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+      XLSX.writeFile(workbook, `query-results-${Date.now()}.xlsx`);
+      toast.success('Excel file downloaded');
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -124,12 +184,35 @@ export default function ResultsDisplay({ result, executionTime, streamingAnswer,
               {success ? 'Query Executed Successfully' : 'Clarification Needed'}
             </h3>
             <div className="flex items-center gap-2">
+              {meta?.cached && (
+                <span className="flex items-center gap-1 text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
+                  <Zap className="w-3 h-3" />
+                  Cached ({meta.cacheAge ? `${Math.round(meta.cacheAge / 1000)}s ago` : 'instant'})
+                </span>
+              )}
               {executionTime !== undefined && (
                 <span className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
                   <Clock className="w-3 h-3" />
                   {executionTime < 1000 ? `${executionTime}ms` : `${(executionTime / 1000).toFixed(2)}s`}
                 </span>
               )}
+              <button
+                onClick={copyAnswer}
+                className="flex items-center gap-1 text-xs px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                title="Copy answer"
+              >
+                {copiedAnswer ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    Copy
+                  </>
+                )}
+              </button>
               {sqlQuery && (
                 <button
                   onClick={copySql}
@@ -185,8 +268,50 @@ export default function ResultsDisplay({ result, executionTime, streamingAnswer,
             <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">
               {data.length} {data.length === 1 ? 'row' : 'rows'}
             </span>
+            <button
+              onClick={copyResults}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              title="Copy results as JSON"
+            >
+              {copiedResults ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  Copy
+                </>
+              )}
+            </button>
+            <button
+              onClick={downloadJSON}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-lg hover:bg-primary-200 dark:hover:bg-primary-900/50 transition-colors"
+              title="Download as JSON"
+            >
+              <FileJson className="w-3.5 h-3.5" />
+              JSON
+            </button>
+            <button
+              onClick={downloadCSV}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+              title="Download as CSV"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              onClick={downloadExcel}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+              title="Download as Excel"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              Excel
+            </button>
           </div>
           <DataTable data={data} />
+          <DataVisualization data={data} />
         </div>
       )}
 

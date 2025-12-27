@@ -9,19 +9,39 @@ import { logger } from '../../utils/logger';
 type LLMClient = OpenAI | Groq;
 
 // Initialize clients based on provider
-const openaiClient = new OpenAI({ 
-  apiKey: config.llm.openai.apiKey,
-  timeout: 30000,
-  maxRetries: 2,
-});
+let openaiClient: OpenAI | null = null;
+let groqClient: Groq | null = null;
 
-const groqClient = new Groq({
-  apiKey: config.llm.groq.apiKey,
-});
+// Lazy initialization to provide better error messages
+const getOpenAIClient = (): OpenAI => {
+  if (!openaiClient) {
+    if (!config.llm.openai.apiKey) {
+      throw new LLMError('OpenAI API key is not configured. Please set OPENAI_API_KEY in your .env file.');
+    }
+    openaiClient = new OpenAI({ 
+      apiKey: config.llm.openai.apiKey,
+      timeout: 30000,
+      maxRetries: 2,
+    });
+  }
+  return openaiClient;
+};
+
+const getGroqClient = (): Groq => {
+  if (!groqClient) {
+    if (!config.llm.groq.apiKey) {
+      throw new LLMError('Groq API key is not configured. Please set GROQ_API_KEY in your .env file.');
+    }
+    groqClient = new Groq({
+      apiKey: config.llm.groq.apiKey,
+    });
+  }
+  return groqClient;
+};
 
 // Determine which client to use - cast to any to handle union type
 const getClient = (): LLMClient => {
-  return config.llm.provider === 'groq' ? groqClient : openaiClient;
+  return config.llm.provider === 'groq' ? getGroqClient() : getOpenAIClient();
 };
 
 const getModel = () => {
@@ -182,16 +202,29 @@ function handleLlmError(error: unknown, providerRaw: string): never {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   const errorName = error instanceof Error ? error.name : 'Error';
   const provider = providerRaw.toUpperCase();
-  logger.error(`LLM query plan generation error (${errorName}):`, errorMessage);
+  
+  // Log the full error for debugging
+  logger.error(`LLM error (${provider}):`, {
+    name: errorName,
+    message: errorMessage,
+    stack: error instanceof Error ? error.stack : undefined
+  });
 
+  // Check for specific error types
   if (errorMessage.includes('API key') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
     throw new LLMError(`Invalid or missing ${provider} API key. Please check your ${provider}_API_KEY in .env file`);
   }
   if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
-    throw new LLMError(`${provider} API rate limit exceeded. Please try again later`);
+    throw new LLMError(`${provider} API rate limit exceeded. Please try again in a few moments`);
   }
   if (errorMessage.includes('quota') || errorMessage.includes('insufficient_quota')) {
-    throw new LLMError(`${provider} API quota exceeded. Please check your billing`);
+    throw new LLMError(`${provider} API quota exceeded. Please check your account billing at ${provider === 'OPENAI' ? 'https://platform.openai.com/usage' : 'https://console.groq.com'}`);
+  }
+  if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+    throw new LLMError(`${provider} API request timed out. Please try again`);
+  }
+  if (errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED')) {
+    throw new LLMError(`Unable to connect to ${provider} API. Please check your internet connection`);
   }
 
   throw new LLMError(`Failed to generate query plan: ${errorMessage}`);
@@ -372,7 +405,9 @@ Instructions:
       }
     }
   } catch (error) {
-    logger.warn('LLM streaming summarization failed:', error);
-    yield `Found ${rows.length} results.`;
+    logger.warn('LLM streaming summarization failed, using fallback:', error);
+    // Use the same fallback logic as non-streaming
+    const fallback = generateFallbackSummary(question, rows);
+    yield fallback;
   }
 }

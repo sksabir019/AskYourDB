@@ -110,13 +110,12 @@ class ConfigValidator {
       errors.push('JWT_SECRET is required in production');
     }
 
-    if (this.config.server.env === 'production') {
-      if (this.config.llm.provider === 'openai' && !this.config.llm.openai.apiKey) {
-        errors.push('OPENAI_API_KEY is required when using OpenAI');
-      }
-      if (this.config.llm.provider === 'groq' && !this.config.llm.groq.apiKey) {
-        errors.push('GROQ_API_KEY is required when using Groq');
-      }
+    // Validate API keys for current provider (in all environments)
+    if (this.config.llm.provider === 'openai' && !this.config.llm.openai.apiKey) {
+      errors.push('OPENAI_API_KEY is required when using OpenAI. Please add it to your .env file.');
+    }
+    if (this.config.llm.provider === 'groq' && !this.config.llm.groq.apiKey) {
+      errors.push('GROQ_API_KEY is required when using Groq. Please add it to your .env file.');
     }
 
     if (this.config.database.engine === 'mongo' && !this.config.database.mongo.uri) {
